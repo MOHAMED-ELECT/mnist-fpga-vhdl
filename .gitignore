@@ -1,0 +1,8 @@
+work/
+*.o
+*.cf
+*.ghw
+*.vcd
+__pycache__/
+*.pyc
+.vscode/
