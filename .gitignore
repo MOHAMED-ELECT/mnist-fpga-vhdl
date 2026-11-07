@@ -6,3 +6,4 @@ work/
 __pycache__/
 *.pyc
 .vscode/
+data/mnist_raw/
