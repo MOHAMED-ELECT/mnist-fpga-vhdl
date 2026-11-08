@@ -1,0 +1,168 @@
+RAPPORT DE SYNTHESE -- mlp_top_synth.vhd (etape 6)
+====================================================
+
+Cible officielle : rtl/mlp_top.vhd (interface section 3.6 du plan),
+synthetise via l'enveloppe rtl/mlp_top_synth.vhd (memes 9 signaux, sans le
+port de debug scores_debug -- voir le commentaire en tete de ce fichier).
+
+Outils : Yosys + plugin ghdl (synthese VHDL) + nextpnr-ecp5 (placement-
+routage). Deux chemins d'installation selon la distribution :
+
+  - Ubuntu 23.10+ / 24.04+ : paquets apt directs.
+        sudo apt-get install -y yosys yosys-plugin-ghdl nextpnr-ecp5
+
+  - Ubuntu 22.04/jammy (et plus ancien, ex. WSL2 par defaut) : ces deux
+    paquets n'existent PAS dans les depots apt. Utiliser le binaire
+    precompile officiel OSS CAD Suite (yosys + plugin ghdl + nextpnr-ecp5
+    + ghdl, tous assortis) :
+        curl -s https://api.github.com/repos/YosysHQ/oss-cad-suite-build/releases/latest \
+          | grep "browser_download_url.*linux-x64" | cut -d '"' -f4 \
+          | xargs curl -L -o oss-cad-suite.tgz
+        mkdir -p ~/tools && tar -xzf oss-cad-suite.tgz -C ~/tools
+        source ~/tools/oss-cad-suite/environment   # a refaire a chaque session
+
+Commande (voir synth/synth.ys et "make synth" / "make synth_timing") :
+
+    yosys -m ghdl synth/synth.ys
+    nextpnr-ecp5 --25k --json results/mlp_top_synth.json --freq 100 \
+        --timing-allow-fail
+
+Piege d'installation : avec des paquets apt SEPARES "ghdl" et
+"yosys-plugin-ghdl" (route Ubuntu 23.10+/24.04+), le plugin ne trouve pas
+toujours tout seul les bibliotheques std/ieee precompilees du paquet
+"ghdl" et echoue avec "error: cannot find \"std\" library". Il faut alors
+fixer la variable GHDL_PREFIX vers ce dossier (voir Makefile,
+GHDL_PLUGIN_PREFIX ; verifier le bon chemin avec :
+dpkg -L ghdl-mcode | grep vhdl/std). Avec l'OSS CAD Suite (route utilisee
+pour mesurer les chiffres ci-dessous, Ubuntu 22.04/WSL2), ce piege
+n'existe pas : le plugin et sa bibliotheque GHDL sont deja assortis dans
+le meme paquetage et se trouvent tout seuls -- laisser GHDL_PLUGIN_PREFIX
+vide (make synth GHDL_PLUGIN_PREFIX=).
+
+
+1. RESSOURCES (cible LFE5U-25F, Yosys "stat" + nextpnr "Device utilisation")
+------------------------------------------------------------------------
+
+Mesure sur les vrais poids entraines (Yosys 0.70, OSS CAD Suite, Ubuntu
+22.04/WSL2) :
+
+  Broches d'E/S (TRELLIS_IO)         28 / 197   (14 %)
+  Blocs memoire dedies (DP16KD)      14 /  56   (25 %)
+  Multiplieurs materiels (MULT18X18D) 5 /  28   (17 %)
+  LUT4                             1 696
+  Bascules (TRELLIS_FF)               480
+  Cellules carry-chain (CCU2C)         224
+  RAM distribuee (TRELLIS_DPR16X4)      4   (petite RAM d'activations, 32x8)
+  Mux dedies de slice (L6MUX21/PFUMX) 260 / 538   (logique de controle/argmax,
+                                                     absorbee en mux plutot
+                                                     qu'en LUT4 par cette
+                                                     version de Yosys)
+
+Piege verifie (celui du plan, section 7 "Pieges frequents") : si
+image_ram.vhd / act_ram.vhd / weight_rom.vhd n'etaient pas ecrits en
+lecture SYNCHRONE avec un tableau constant, Yosys ne les reconnaitrait
+pas comme de la memoire et les eclaterait en dizaines de milliers de LUT.
+Ici, "Number of memories: 0 / Number of memory bits: 0" dans le "stat"
+confirme que TOUT a ete correctement absorbe dans des DP16KD (BRAM
+dediee) : aucune memoire "orpheline" n'a ete laissee en logique generique.
+1 696 LUT4 pour un reseau 784-32-10 est un chiffre raisonnable -- pas
+d'explosion.
+
+(Les blocs memoire et multiplieurs materiels -- 14 DP16KD et 5 MULT18X18D
+-- sont EXACTEMENT les memes qu'avec des poids aleatoires de test dans mon
+propre bac a sable : ces ressources ne dependent que de la structure du
+circuit (tailles N_IN/N_HIDDEN/N_OUT), pas des valeurs des poids. Seul le
+compte de LUT4 varie legerement selon la version de Yosys utilisee.)
+
+
+2. FREQUENCE MAXIMALE (nextpnr-ecp5, place-and-route reel)
+------------------------------------------------------------------------
+
+  Fmax mesuree (LFE5U-25F, vitesse/boitier par defaut) : 50,37 MHz
+
+(Les testbenches de simulation supposaient 100 MHz par commodite pour
+calculer une latence indicative -- la frequence reellement atteignable
+apres placement-routage est environ 2 fois plus basse. Les comptes de
+CYCLES mesures en simulation, eux, restent corrects quelle que soit la
+frequence : il suffit de les multiplier par 1/50,37 MHz au lieu de
+1/100 MHz pour obtenir la latence reelle, ex. 25 579 cycles / 50,37 MHz
+= 507,8 us pour une image au lieu des 255,8 us supposees.)
+
+Chemin critique (rapport nextpnr complet, nextpnr-ecp5 --timing-allow-fail) :
+
+  registre accumulateur de la couche 1 (mac_unit.acc_r) -> relu_requant
+  (couche 1) : multiplication large acc(32 bits signes) x M(coefficient de
+  requantification, ~17 bits) pour la remise a l'echelle INT8 -> registre
+  de sortie
+
+  12.30 ns de logique + 7.56 ns de routage = 19.86 ns  ==>  1 / 19.86 ns = 50.37 MHz
+
+Ce qui limite la frequence, concretement : contrairement a ce qu'on
+pourrait attendre (l'addition 8x8 du MAC lui-meme), le vrai goulot est la
+MULTIPLICATION DE REQUANTIFICATION dans relu_requant.vhd (acc * m, 32 bits
+x ~17 bits). Elle est plus large qu'un seul multiplieur materiel
+MULT18X18D (max 18x18 bits), donc Yosys la decompose en produits partiels
+combines par une longue chaine de retenue (CCU2C) -- visible dans le
+rapport nextpnr comme une suite de cellules CCU2C en cascade. Piste
+d'amelioration (non implementee ici, "pour aller plus loin") : pipeliner
+cette multiplication sur 2 cycles, ou reduire la largeur de M.
+
+
+3. COMPARAISON AVEC LE PARALLELISME (etape 5 + etape 6 combinees)
+------------------------------------------------------------------------
+
+En plus de la cible officielle (N=1 MAC, ci-dessus), deux variantes de
+l'etape 5 (rtl/mlp_top_n.vhd, via rtl/mlp_top_n_synth.vhd) ont ete
+synthetisees pour chiffrer le compromis vitesse/surface annonce a
+l'etape 5 ("1 MAC ou 32 MAC ? le compromis en chiffres") :
+
+  N_MAC | LUT4 | DP16KD | MULT18X18D | Fmax      | tient sur...
+  ------+------+--------+------------+-----------+---------------------------
+     1  | 1696 |     14 |      5     | 50.4 MHz  | LFE5U-25F (25 % memoire)
+     8  | 2356 |    105 |     19     | ~37.6 MHz | LFE5U-45F seulement
+                                                     (105/108 = 97 % memoire,
+                                                      NE TIENT PAS sur 25F)
+    32  | 8099 |    417 |     67     |    --     | NE TIENT SUR AUCUN ECP5-U
+                                                     (417 > 208 blocs du plus
+                                                      grand modele, le 85F)
+
+(La ligne N=1, cible officielle, est mesuree directement sur mes poids
+entraines reels avec le toolchain OSS CAD Suite. Les lignes N=8 et N=32
+viennent d'une validation complementaire sur des poids de test, menee
+pour explorer le compromis de l'etape 5 -- les blocs memoire et
+multiplieurs ne dependent que de la structure du circuit, pas des valeurs
+de poids, donc ces chiffres restent representatifs ; le LUT4 peut varier
+de quelques pourcents selon la version de Yosys utilisee, comme observe
+ci-dessus entre N=1 mesure ici (1696) et en bac a sable (1835).)
+
+Lecon tiree (a retenir pour le CV / le post LinkedIn P6/P7) : le cout du
+parallelisme spatial n'est PAS seulement le nombre de multiplieurs (ca,
+c'est bon marche : 5 -> 19 -> 67, ca tiendrait large sur n'importe quelle
+cible). Le vrai verrou est la BANDE PASSANTE MEMOIRE : chaque MAC
+supplementaire a besoin de SA PROPRE lecture simultanee de poids et de
+biais, et un bloc BRAM physique (DP16KD) n'a que 2 ports. Au-dela de 2
+voies, le contenu de la ROM doit etre DUPLIQUE dans plusieurs blocs rien
+que pour fournir assez de ports de lecture -- d'ou une croissance de la
+consommation memoire bien plus rapide que lineaire en N (14 -> 105 -> 417,
+pas 14 -> 112 -> 448 lineaire, mais du meme ordre de grandeur : la
+duplication domine). Resultat concret : N=32, qui semblait le meilleur
+choix sur le seul critere "cycles par image" (etape 5, Figure 7), est en
+realite IRREALISABLE sur cette famille de FPGA. N=8 n'entre que sur un
+modele plus gros (45F) et au prix d'une frequence plus basse (congestion
+du routage autour des BRAM), ce qui mange une partie du gain de cycles.
+Le meilleur compromis reel depend donc du FPGA cible, pas seulement de
+l'algorithme -- exactement le genre d'arbitrage qu'un ingenieur FPGA doit
+documenter et justifier.
+
+
+4. REPRODUIRE
+------------------------------------------------------------------------
+
+    make synth            # stat Yosys complet -> results/synth_report_raw.txt
+    make synth_timing     # place-and-route + Fmax -> results/synth_timing_raw.txt
+
+Note : ces deux cibles ecrivent des LOGS BRUTS complets (plusieurs Mo,
+utiles pour deboguer en detail) dans des fichiers "*_raw.txt" separes.
+CE fichier (results/synth_report.txt, commite dans le depot) est un
+resume ecrit a la main a partir de ces logs, garde lisible et de taille
+raisonnable -- "make synth"/"make synth_timing" ne l'ecrasent pas.

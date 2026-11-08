@@ -1,0 +1,41 @@
+name: CI
+
+# Lance la suite de tests VHDL (GHDL) a chaque push et pull request, pour
+# que le depot reste "irreprochable" (etape 6 du plan) : n'importe qui qui
+# clone le depot peut voir d'un coup d'oeil que tout simule correctement.
+#
+# Volontairement RAPIDE (quelques minutes) : seules les unites de base et
+# le reseau complet sur un petit echantillon (make ci = test_units +
+# sim_fast) sont lances ici. La validation complete sur 1000 images
+# (make sim_full) et le balayage du parallelisme (scripts/run_sweep.sh)
+# sont trop longs pour tourner a chaque commit ; ils se lancent en local.
+# La synthese (make synth / make synth_timing) n'est pas non plus dans la
+# CI : elle demande yosys + nextpnr-ecp5 (install plus lourde) et n'a pas
+# besoin d'etre revalidee a chaque ligne de VHDL changee.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cloner le depot
+        uses: actions/checkout@v4
+
+      - name: Installer GHDL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ghdl
+
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Installer les dependances Python (vecteurs de test)
+        run: pip install -r python/requirements.txt
+
+      - name: Lancer les tests (make ci)
+        run: make ci

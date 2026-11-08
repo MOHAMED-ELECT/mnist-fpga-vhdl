@@ -1,7 +1,7 @@
-N,cycles,latence_us_100MHz,LUT,memoires,Fmax_MHz
-1,25579,255.79,N/A,N/A,N/A
-2,12812,128.12,N/A,N/A,N/A
-4,6446,64.46,N/A,N/A,N/A
-8,3263,32.63,N/A,N/A,N/A
-16,1654,16.54,N/A,N/A,N/A
-32,867,8.67,N/A,N/A,N/A
+N,cycles,latence_us_100MHz,LUT4,DP16KD_memoire,Fmax_MHz_reel,notes
+1,25579,255.79,1696,14,50.37,tient sur LFE5U-25F (25% des 56 blocs memoire) ; mesure sur poids reels ; voir synth_report.txt
+2,12812,128.12,N/A,N/A,N/A,non synthetise (bonus possible)
+4,6446,64.46,N/A,N/A,N/A,non synthetise (bonus possible)
+8,3263,32.63,2356,105,37.6,ne tient PAS sur LFE5U-25F (105>56 blocs) ; tient sur LFE5U-45F (105/108 = 97%)
+16,1654,16.54,N/A,N/A,N/A,non synthetise (bonus possible)
+32,867,8.67,8099,417,N/A,ne tient sur AUCUN modele ECP5-U (417 > 208 blocs memoire du plus grand modele 85F)

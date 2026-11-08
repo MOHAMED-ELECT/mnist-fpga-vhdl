@@ -1,0 +1,46 @@
+# synth.ys
+# Script de synthese Yosys (etape 6) pour mlp_top_synth.vhd -- l'enveloppe
+# qui expose seulement les 9 signaux officiels de mlp_top.vhd (section 3.6
+# du plan), sans le port de debug scores_debug (qui ferait exploser le
+# nombre de broches d'E/S sur un vrai boitier FPGA).
+#
+# Cible : ECP5 (famille LFE5U). Les poids du reseau occupent environ
+# 200 kbit : une petite famille comme iCE40 n'a pas assez de memoire, d'ou
+# le choix d'ECP5 (synth_ecp5), qui a au moins 56 blocs de 18 kbit meme sur
+# son plus petit modele (LFE5U-12F/25F).
+#
+# Piege verifie (voir README/docs) : si weight_rom.vhd/act_ram.vhd/
+# image_ram.vhd n'etaient pas ecrits en lecture SYNCHRONE avec un tableau
+# constant, Yosys ne les reconnaitrait pas comme de la memoire (blocs
+# DP16KD) et les transformerait en dizaines de milliers de LUT. Ici, le
+# "stat" ci-dessous doit montrer des cellules DP16KD (memoire dediee), pas
+# un nombre de LUT4 demesure.
+#
+# Usage :
+#   GHDL_PREFIX=/usr/lib/ghdl/mcode/vhdl yosys -m ghdl synth/synth.ys
+# (ou : make synth, qui fixe GHDL_PREFIX automatiquement -- voir Makefile)
+#
+# Piege d'installation (decouvert en validant ce script) : le plugin
+# yosys-plugin-ghdl (paquet apt) utilise une version de libghdl qui ne
+# trouve PAS automatiquement les bibliotheques std/ieee precompilees :
+# sans GHDL_PREFIX pointant vers le dossier ou le paquet "ghdl" (mcode) a
+# installe ses bibliotheques, l'import echoue avec
+# "error: cannot find \"std\" library".
+
+ghdl --std=08 \
+     rtl/weights_pkg.vhd \
+     rtl/mac_unit.vhd \
+     rtl/relu_requant.vhd \
+     rtl/argmax.vhd \
+     rtl/image_ram.vhd \
+     rtl/act_ram.vhd \
+     rtl/weight_rom.vhd \
+     rtl/controller_fsm.vhd \
+     rtl/layer_engine.vhd \
+     rtl/mlp_top.vhd \
+     rtl/mlp_top_synth.vhd \
+     -e mlp_top_synth
+
+synth_ecp5 -top mlp_top_synth -json results/mlp_top_synth.json
+
+stat

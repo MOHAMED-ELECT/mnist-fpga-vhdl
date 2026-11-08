@@ -7,3 +7,8 @@ __pycache__/
 *.pyc
 .vscode/
 data/mnist_raw/
+
+# artefacts de synthese : volumineux, regenerables via "make synth" /
+# "make synth_timing" (voir results/synth_report.txt pour le resume commite)
+results/*_raw.txt
+results/*.json
