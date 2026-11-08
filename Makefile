@@ -8,7 +8,12 @@ TB  = tb/tb_counter.vhd
 UNIT_RTL = rtl/mac_unit.vhd rtl/relu_requant.vhd rtl/argmax.vhd
 UNIT_TB  = tb/tb_mac_unit.vhd tb/tb_relu_requant.vhd tb/tb_argmax.vhd
 
-.PHONY: test wave clean vectors test_units
+LAYER1_RTL = rtl/weights_pkg.vhd rtl/mac_unit.vhd rtl/relu_requant.vhd rtl/argmax.vhd \
+             rtl/image_ram.vhd rtl/act_ram.vhd rtl/weight_rom.vhd \
+             rtl/controller_fsm.vhd rtl/layer_engine.vhd
+LAYER1_TB  = tb/tb_layer1.vhd
+
+.PHONY: test wave clean vectors test_units weights_pkg layer1_ref test_layer1
 
 test:
 	mkdir -p $(WORKDIR)
@@ -34,6 +39,18 @@ test_units: vectors
 	$(GHDL) -r $(STD) --workdir=$(WORKDIR) tb_relu_requant
 	@echo "=== tb_argmax ==="
 	$(GHDL) -r $(STD) --workdir=$(WORKDIR) tb_argmax
+
+weights_pkg:
+	python3 python/gen_vhdl_pkg.py
+
+layer1_ref:
+	python3 python/export_layer1_ref.py
+
+test_layer1: weights_pkg layer1_ref
+	mkdir -p $(WORKDIR)
+	$(GHDL) -a $(STD) --workdir=$(WORKDIR) $(LAYER1_RTL) $(LAYER1_TB)
+	$(GHDL) -e $(STD) --workdir=$(WORKDIR) tb_layer1
+	$(GHDL) -r $(STD) --workdir=$(WORKDIR) tb_layer1
 
 clean:
 	rm -rf $(WORKDIR) *.o *.cf

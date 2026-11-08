@@ -54,6 +54,22 @@ def infer(x_q, params):
     return digit, scores
 
 
+def infer_with_hidden(x_q, params):
+    """Comme infer(), mais renvoie aussi les activations cachees h_q
+    (sortie de la couche 1 seule). Sert de reference pour valider
+    layer_engine.vhd independamment du reste du reseau (etape 3)."""
+    W1_q, b1_q = params["W1_q"], params["b1_q"]
+    M1, S1 = params["M1"], params["S1"]
+    W2_q, b2_q = params["W2_q"], params["b2_q"]
+
+    acc1 = x_q @ W1_q + b1_q
+    h_q = np.clip((acc1 * M1) >> S1, 0, 127)
+
+    scores = h_q @ W2_q + b2_q
+    digit = int(np.argmax(scores))
+    return h_q, digit, scores
+
+
 def main():
     """Auto-test : verifie que l'inference tourne et est deterministe."""
     params = load_quantized()
