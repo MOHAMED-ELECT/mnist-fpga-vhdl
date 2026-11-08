@@ -6,9 +6,12 @@
 --
 -- Piege classique : les memoires (ROM/RAM) sont a lecture synchrone, donc
 -- la donnee a une adresse n'est valide qu'un cycle APRES avoir presente
--- cette adresse. Les etats *_WAIT / *_ADDR ci-dessous existent pour
--- absorber ce decalage d'un cycle (on presente l'adresse un cycle, on
--- utilise la donnee le cycle suivant).
+-- cette adresse. Pour eviter de "perdre" un cycle par MAC (une adresse,
+-- puis le calcul), la boucle MAC_LOOP est pipelinee : pendant qu'on
+-- applique le produit pour l'entree i (mac_en, avec les donnees
+-- prechargees au cycle precedent), on presente DEJA l'adresse de
+-- l'entree i+1. Ainsi la boucle dure exactement N_IN cycles, comme
+-- l'indique la Figure 5 du plan ("784 cycles en couche 1, 32 en couche 2").
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -40,7 +43,7 @@ end entity controller_fsm;
 
 architecture rtl of controller_fsm is
 
-  type state_t is (IDLE, LOAD_BIAS, LOAD_BIAS_WAIT, MAC_ADDR, MAC_APPLY,
+  type state_t is (IDLE, LOAD_BIAS, LOAD_BIAS_WAIT, MAC_LOOP,
                     REQUANT, WRITE_ACT, NEXT_NEURON, DONE_ST);
   signal state, next_state : state_t := IDLE;
 
@@ -97,24 +100,29 @@ begin
         next_state <= LOAD_BIAS_WAIT;
 
       when LOAD_BIAS_WAIT =>
-        mac_clear  <= '1';            -- b_data est valide : on charge le biais
+        mac_clear  <= '1';    -- b_data est valide : on charge le biais
         i_next     <= 0;
-        next_state <= MAC_ADDR;
+        -- precharge l'entree i=0 : adresse presentee ce cycle, donnee
+        -- valide au cycle suivant (premiere iteration de MAC_LOOP)
+        in_addr    <= 0;
+        w_addr     <= 0 * N_HIDDEN + j;
+        next_state <= MAC_LOOP;
 
-      when MAC_ADDR =>
-        in_addr    <= i;
-        w_addr     <= i * N_HIDDEN + j;   -- doit correspondre a l'aplatissement
-                                            -- ligne-major (C order) de W(N_IN,N_HIDDEN)
-                                            -- fait par gen_vhdl_pkg.py
-        next_state <= MAC_APPLY;
-
-      when MAC_APPLY =>
-        mac_en <= '1';                -- in_data/w_data sont valides
-        if i = N_IN - 1 then
-          next_state <= REQUANT;
-        else
+      when MAC_LOOP =>
+        -- applique le produit pour l'entree i : in_data/w_data ont ete
+        -- prechargees au cycle precedent (LOAD_BIAS_WAIT pour i=0, ou
+        -- l'iteration precedente de MAC_LOOP pour i>0)
+        mac_en <= '1';
+        if i < N_IN - 1 then
+          -- pendant qu'on calcule i, on precharge deja i+1
+          in_addr    <= i + 1;
+          w_addr     <= (i + 1) * N_HIDDEN + j;   -- aplatissement ligne-major
+                                                    -- (C order) de W(N_IN,N_HIDDEN),
+                                                    -- comme le fait gen_vhdl_pkg.py
           i_next     <= i + 1;
-          next_state <= MAC_ADDR;
+          next_state <= MAC_LOOP;
+        else
+          next_state <= REQUANT;
         end if;
 
       when REQUANT =>

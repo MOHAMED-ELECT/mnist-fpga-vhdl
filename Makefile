@@ -13,7 +13,12 @@ LAYER1_RTL = rtl/weights_pkg.vhd rtl/mac_unit.vhd rtl/relu_requant.vhd rtl/argma
              rtl/controller_fsm.vhd rtl/layer_engine.vhd
 LAYER1_TB  = tb/tb_layer1.vhd
 
-.PHONY: test wave clean vectors test_units weights_pkg layer1_ref test_layer1
+TOP_RTL = rtl/weights_pkg.vhd rtl/mac_unit.vhd rtl/relu_requant.vhd rtl/argmax.vhd \
+          rtl/image_ram.vhd rtl/act_ram.vhd rtl/weight_rom.vhd \
+          rtl/controller_fsm.vhd rtl/layer_engine.vhd rtl/mlp_top.vhd
+TOP_TB  = tb/tb_mlp_top.vhd
+
+.PHONY: test wave clean vectors test_units weights_pkg layer1_ref test_layer1 sim_fast sim_full
 
 test:
 	mkdir -p $(WORKDIR)
@@ -51,6 +56,18 @@ test_layer1: weights_pkg layer1_ref
 	$(GHDL) -a $(STD) --workdir=$(WORKDIR) $(LAYER1_RTL) $(LAYER1_TB)
 	$(GHDL) -e $(STD) --workdir=$(WORKDIR) tb_layer1
 	$(GHDL) -r $(STD) --workdir=$(WORKDIR) tb_layer1
+
+sim_fast:
+	mkdir -p $(WORKDIR)
+	$(GHDL) -a $(STD) --workdir=$(WORKDIR) $(TOP_RTL) $(TOP_TB)
+	$(GHDL) -e $(STD) --workdir=$(WORKDIR) tb_mlp_top
+	$(GHDL) -r $(STD) --workdir=$(WORKDIR) tb_mlp_top -gN_IMAGES=50
+
+sim_full:
+	mkdir -p $(WORKDIR)
+	$(GHDL) -a $(STD) --workdir=$(WORKDIR) $(TOP_RTL) $(TOP_TB)
+	$(GHDL) -e $(STD) --workdir=$(WORKDIR) tb_mlp_top
+	$(GHDL) -r $(STD) --workdir=$(WORKDIR) tb_mlp_top -gN_IMAGES=1000
 
 clean:
 	rm -rf $(WORKDIR) *.o *.cf
