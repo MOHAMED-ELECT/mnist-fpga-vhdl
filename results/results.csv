@@ -1,0 +1,7 @@
+N,cycles,latence_us_100MHz,LUT,memoires,Fmax_MHz
+1,25579,255.79,N/A,N/A,N/A
+2,12812,128.12,N/A,N/A,N/A
+4,6446,64.46,N/A,N/A,N/A
+8,3263,32.63,N/A,N/A,N/A
+16,1654,16.54,N/A,N/A,N/A
+32,867,8.67,N/A,N/A,N/A
