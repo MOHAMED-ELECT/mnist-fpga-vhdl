@@ -12,6 +12,30 @@ nextpnr-ecp5, tous gratuits).
 > ⚠️ Remplace `TON-USERNAME` ci-dessus (badge CI) par le vrai compte GitHub
 > une fois le dépôt poussé, pour que le badge s'affiche correctement.
 
+## Démo
+
+![Démo : reconnaissance d'un chiffre manuscrit par le circuit VHDL](docs/demo.gif)
+
+> 🎬 GIF à générer une fois (voir [la section "Générer docs/demo.gif"](#générer-docsdemogif)
+> plus bas) — la démo elle-même tourne déjà avec `make demo`.
+
+Une image de test MNIST s'affiche en ASCII art dans le terminal, le
+circuit VHDL (exactement l'interface qui serait synthétisée sur FPGA)
+charge l'image, calcule, et le terminal affiche le chiffre prédit avec le
+nombre de cycles mesuré :
+
+```bash
+make demo                 # image de test au hasard
+make demo INDEX=42        # une image precise
+```
+
+> ⚠️ Si tu as fait `source .../oss-cad-suite/environment` dans ce terminal
+> (pour `make synth`), `make demo`/`make ci`/`make sim_full` peuvent
+> echouer (erreur de link `__isoc23_strtol`, ou "cannot find std library")
+> : l'OSS CAD Suite ecrase `ghdl` et `GHDL_PREFIX` pour toute la session.
+> Corrige avec `export PATH=$(echo "$PATH" | tr ':' '\n' | grep -v oss-cad-suite | paste -sd:); unset GHDL_PREFIX`
+> ou ouvre simplement un nouveau terminal.
+
 ## But
 
 Montrer, avec des chiffres mesurés (pas des estimations), ce que ça coûte
@@ -126,14 +150,15 @@ l'installation) : `make synth` puis `make synth_timing`.
 ```
 mnist-fpga-vhdl/
 ├── README.md              vitrine : but, schéma, résultats, reproduction
-├── Makefile                make test_units | sim_fast | sim_full | synth | ci
+├── Makefile                make test_units | sim_fast | sim_full | synth | ci | demo
 ├── python/                 entraînement, quantification INT8, modèle de référence
 ├── rtl/                    circuit VHDL-2008 (mac_unit, controller_fsm, mlp_top, ...)
 ├── tb/                     testbenches GHDL
 ├── data/                   poids quantifiés (.hex) et images de test
 ├── scripts/run_sweep.sh    balayage du parallélisme N=1..32
 ├── synth/synth.ys           script de synthèse Yosys (cible ECP5)
-├── docs/                   schéma d'architecture, chronogramme
+├── demo/demo.py, run_demo.sh   demo "make demo" : ASCII art + GHDL + prediction
+├── docs/                   schéma d'architecture, chronogramme, demo.gif
 ├── results/                results.csv, synth_report.txt, graphiques
 └── .github/workflows/ci.yml   tests automatiques (GHDL) à chaque push
 ```
@@ -147,8 +172,33 @@ Projet mené en 8 étapes, du modèle Python jusqu'à la démo publique :
 - [x] **Étape 3** — Mémoires + contrôleur FSM, couche 1 validée (320/320)
 - [x] **Étape 4** — Réseau complet validé sur 1000 images (96,60 %, 0 écart)
 - [x] **Étape 5** — Exploration du parallélisme (N=1 à 32 MAC)
-- [x] **Étape 6** — Synthèse FPGA (Yosys/nextpnr), intégration continue, README ← *tu es ici*
-- [ ] **Étape 7** — Démo et publication
+- [x] **Étape 6** — Synthèse FPGA (Yosys/nextpnr), intégration continue, README
+- [x] **Étape 7** — Démo (`make demo`) ← *tu es ici* (GIF à générer, voir ci-dessous)
+
+## Générer `docs/demo.gif`
+
+`demo/demo.py` tourne déjà (`make demo`) ; il ne manque que l'enregistrement
+à l'écran pour le GIF du README. Façon la plus simple sous WSL/Windows :
+
+1. Agrandis la fenêtre de ton terminal WSL pour que l'ASCII art tienne bien.
+2. Enregistre l'écran pendant que tu lances `make demo` (Windows : `Win+G`
+   pour ouvrir la barre de jeu Xbox et enregistrer la fenêtre ; ou tout
+   autre outil de capture d'écran/vidéo).
+3. Convertis la vidéo en GIF avec ffmpeg :
+   ```bash
+   ffmpeg -i capture.mp4 -vf "fps=10,scale=900:-1:flags=lanczos" -loop 0 docs/demo.gif
+   ```
+4. Place le fichier dans `docs/demo.gif` (c'est déjà le chemin référencé
+   en haut de ce README) et commit/push.
+
+Alternative 100 % terminal (sans capture d'écran), avec
+[asciinema](https://asciinema.org/) :
+```bash
+pip install --user asciinema
+asciinema rec demo.cast -c "make demo"
+# puis convertir demo.cast en GIF, par ex. avec agg (https://github.com/asciinema/agg)
+# ou en l'uploadant sur asciinema.org et en l'exportant
+```
 
 ## Outils
 

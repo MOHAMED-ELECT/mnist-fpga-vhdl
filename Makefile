@@ -33,7 +33,7 @@ TOP_TB  = tb/tb_mlp_top.vhd
 GHDL_PLUGIN_PREFIX = /usr/lib/ghdl/mcode/vhdl
 
 .PHONY: test wave clean vectors test_units weights_pkg layer1_ref test_layer1 \
-        sim_fast sim_full synth synth_timing ci
+        sim_fast sim_full synth synth_timing ci demo
 
 test:
 	mkdir -p $(WORKDIR)
@@ -116,6 +116,12 @@ synth_timing: synth
 # local. make sim_full (1000 images) et scripts/run_sweep.sh sont aussi
 # exclus : trop longs pour une CI a chaque commit.
 ci: test_units sim_fast
+
+# demo etape 7 : choisit une image de test, l'affiche en ASCII art,
+# lance GHDL dessus (circuit reel, interface officielle mlp_top_synth) et
+# affiche la prediction. "make demo INDEX=42" pour une image precise.
+demo:
+	python3 demo/demo.py $(if $(INDEX),--index $(INDEX))
 
 clean:
 	rm -rf $(WORKDIR) *.o *.cf
